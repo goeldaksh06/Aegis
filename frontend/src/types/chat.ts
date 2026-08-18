@@ -105,4 +105,8 @@ export interface OperatorRunRecord {
   provider?: string;
   latencyMs?: number;
   error?: string;
+  riskLevel?: RiskLevel;
+  riskScore?: number;
+  qualityScore?: number;
+  costUsd?: number;
 }

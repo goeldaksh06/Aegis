@@ -1,4 +1,4 @@
-import { KeyboardEvent, FormEvent, useEffect, useState } from "react";
+import { KeyboardEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import { login as apiLogin, register as apiRegister, type UserPayload } from "./api/authClient";
 import { runChatStream, type TraceStageEvent } from "./api/chatStreamClient";
@@ -17,30 +17,179 @@ const DEFAULT_PROMPT =
 
 interface ScenarioChip {
   label: string;
+  icon: string;
+  description: string;
+  exampleQuestion: string;
   prompt: string;
 }
 
 const SCENARIO_CHIPS: ScenarioChip[] = [
-  { label: "Supply chain", prompt: DEFAULT_PROMPT },
   {
-    label: "Cyber incident",
+    label: "Supply Chain Risk",
+    icon: "📦",
+    description: "Assess operational disruption risk and identify major contributing factors.",
+    exampleQuestion: "A key supplier just went dark after a port disruption — what's our exposure?",
+    prompt: DEFAULT_PROMPT,
+  },
+  {
+    label: "Cybersecurity",
+    icon: "🛡️",
+    description: "Analyze a potential security incident and recommend immediate actions.",
+    exampleQuestion: "Our customer database may have been breached — how bad is it?",
     prompt:
       "Our customer database was exposed in a suspected breach discovered 2 hours ago. " +
       "Analyze the risk and recommend an immediate response.",
   },
   {
-    label: "Market shock",
+    label: "Market Intelligence",
+    icon: "📈",
+    description: "Investigate market signals and identify key risks and opportunities.",
+    exampleQuestion: "A competitor just went bankrupt and our sector dropped 15% — do we need to react?",
     prompt:
       "A major competitor just filed for bankruptcy, triggering a 15% drop in our sector's stock prices overnight. " +
       "Research the market implications and recommend how we should respond this week.",
   },
   {
-    label: "Natural disaster",
+    label: "Disaster Response",
+    icon: "🌀",
+    description: "Analyze a developing situation and prioritize response actions.",
+    exampleQuestion: "A hurricane is 48 hours from our main distribution center — what should we do first?",
     prompt:
       "A category 4 hurricane is projected to make landfall near our primary distribution center in 48 hours. " +
       "Analyze the operational risk and recommend an immediate response.",
   },
 ];
+
+type AgentKey = "research" | "analyst" | "coder" | "document" | "planner";
+
+interface AgentInfo {
+  key: AgentKey;
+  label: string;
+  tagline: string;
+  description: string;
+  usefulWhen: string;
+}
+
+const AGENT_INFO: AgentInfo[] = [
+  {
+    key: "research",
+    label: "Research",
+    tagline: "Finds relevant information",
+    description: "Retrieves evidence from the knowledge base and available research sources.",
+    usefulWhen: "You need to gather facts, context, or background before deciding anything.",
+  },
+  {
+    key: "analyst",
+    label: "Analyst",
+    tagline: "Turns evidence into analysis",
+    description: "Identifies patterns, risks, findings, and implications, with quantified reasoning.",
+    usefulWhen: "You need risk scoring, comparisons, or a quantified impact assessment.",
+  },
+  {
+    key: "planner",
+    label: "Planner",
+    tagline: "Coordinates complex missions",
+    description: "Breaks a mission into sub-tasks and delegates each one to the specialized agent that fits it.",
+    usefulWhen: "The mission has multiple distinct parts that benefit from different agents.",
+  },
+  {
+    key: "coder",
+    label: "Coder",
+    tagline: "Performs computational analysis",
+    description: "Used when calculations, debugging, or code-based analysis are useful to the mission.",
+    usefulWhen: "The mission involves a technical implementation, bug, or computational question.",
+  },
+  {
+    key: "document",
+    label: "Document",
+    tagline: "Extracts and structures findings",
+    description: "Interprets documents, contracts, or policies precisely, flagging ambiguity instead of guessing.",
+    usefulWhen: "The mission involves interpreting a document, contract, or policy.",
+  },
+];
+
+const ARCHITECTURE_STEPS = [
+  { title: "Understand", detail: "Aegis parses the mission and screens it for safety before anything else runs." },
+  { title: "Plan", detail: "The router picks the right agent — or the Planner decomposes a multi-part mission." },
+  { title: "Research", detail: "Relevant evidence is retrieved from a grounded knowledge base, when applicable." },
+  { title: "Analyze", detail: "The selected agent reasons over the evidence and drafts findings." },
+  { title: "Verify", detail: "The response is evaluated for groundedness and structure before being returned." },
+  { title: "Deliver", detail: "A structured intelligence brief is built, costed, and saved to your mission history." },
+];
+
+const TRUST_ITEMS = [
+  "Evidence-backed analysis, grounded in a real retrieval index",
+  "Safety screening before any request reaches the model",
+  "Deterministic response quality evaluation on every mission",
+  "Full agent execution visibility, not a black box",
+  "Source transparency — evidence links back to real documents",
+  "Real cost transparency, per mission and per agent",
+];
+
+const ENGINEERING_HIGHLIGHTS = [
+  "5 specialized agents with real routing",
+  "Genuine multi-agent orchestration (Planner → sub-agents)",
+  "Grounded RAG with a relevance threshold",
+  "Live SSE execution streaming",
+  "Per-agent duration/token/cost observability",
+  "Real cost tracking, not estimated after the fact",
+  "Multi-turn conversation memory",
+  "Prompt-injection protection",
+  "PII detection",
+  "Deterministic + optional LLM-judge evaluation",
+  "JWT authentication with cross-user isolation",
+  "101 backend tests, 10+ frontend tests, CI on every push",
+];
+
+const MISSION_TIP_EXAMPLES = {
+  bad: "Supply chain?",
+  good:
+    "Assess the risk of semiconductor supply disruption over the next 30 days and identify the " +
+    "three biggest contributing factors.",
+};
+
+/** Friendly, non-technical explanation shown when a request is blocked by the safety layer.
+ * Deliberately does not surface the backend's raw block_reason (which currently includes the
+ * matched regex pattern) — that's an implementation detail, not something a user needs to see. */
+export function friendlyModerationMessage(): { reason: string; whatHappened: string; whatToDo: string } {
+  return {
+    reason: "Prompt injection detected.",
+    whatHappened:
+      "The request appeared to attempt to override Aegis's internal instructions or behavior, " +
+      "so it was stopped before reaching any model.",
+    whatToDo:
+      "Try asking Aegis to perform the task directly, without language intended to override its " +
+      "instructions or reveal internal behavior.",
+  };
+}
+
+interface RagChunk {
+  id: string;
+  text: string;
+  score: number;
+  source: string;
+}
+
+/** Extracts real retrieved RAG chunks from tool_results, if the backend included any — used to
+ * render evidence as source-attributed cards instead of only plain extracted sentences. */
+export function extractRagChunks(toolResults: Array<Record<string, unknown>>): RagChunk[] {
+  const ragResult = toolResults.find((result) => result.tool_type === "rag");
+  const metadata = ragResult?.metadata as Record<string, unknown> | undefined;
+  const chunks = metadata?.chunks as Array<Record<string, unknown>> | undefined;
+  if (!chunks) {
+    return [];
+  }
+
+  return chunks.map((chunk) => {
+    const chunkMetadata = chunk.metadata as Record<string, unknown> | undefined;
+    return {
+      id: String(chunk.id ?? ""),
+      text: String(chunk.text ?? ""),
+      score: Number(chunk.score ?? 0),
+      source: String(chunkMetadata?.source ?? "unknown source"),
+    };
+  });
+}
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_AEGIS_API_BASE_URL ?? "http://127.0.0.1:8000";
 const RUN_HISTORY_LIMIT = 6;
@@ -64,7 +213,7 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatConfidence(value: number): string {
+export function formatConfidence(value: number): string {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "n/a";
 }
 
@@ -224,7 +373,7 @@ type BackendHealthState =
   | { status: "healthy"; label: string }
   | { status: "unhealthy"; label: string };
 
-function buildHistoryRecord(
+export function buildHistoryRecord(
   prompt: string,
   response: ChatResponse | null,
   error: string | null,
@@ -251,6 +400,10 @@ function buildHistoryRecord(
     model: response.routing.model,
     provider: response.routing.provider,
     latencyMs: response.telemetry?.latency_ms ?? undefined,
+    riskLevel: response.mission_brief?.risk_level,
+    riskScore: response.mission_brief?.risk_score,
+    qualityScore: response.evaluation?.overall_score,
+    costUsd: response.cost?.cost_usd,
   };
 }
 
@@ -377,7 +530,7 @@ function ExecutionTrace({ events, isLive }: { events: TraceStageEvent[]; isLive:
 
   return (
     <>
-      <ol className="execution-trace">
+      <ol className="execution-trace" aria-live="polite" aria-label="Mission execution progress">
         {stages.map((stage, index) => {
           const event = seen.get(stage);
           const isDone = Boolean(event);
@@ -429,6 +582,81 @@ function ExecutionTrace({ events, isLive }: { events: TraceStageEvent[]; isLive:
   );
 }
 
+const ONBOARDING_STEPS = [
+  {
+    title: "1. Describe your mission",
+    detail: "Tell Aegis what you want investigated — a situation, a risk, a decision you need evidence for.",
+  },
+  {
+    title: "2. Aegis plans the work",
+    detail: "The Planner determines which agents and steps are needed for the mission.",
+  },
+  {
+    title: "3. Agents investigate",
+    detail: "Research, Analyst, Coder, and Document agents perform specialized work.",
+  },
+  { title: "4. Evidence is retrieved", detail: "Aegis searches relevant knowledge sources for supporting evidence." },
+  {
+    title: "5. The result is evaluated",
+    detail: "Safety and quality checks run before the final brief is returned.",
+  },
+  {
+    title: "6. You receive the intelligence brief",
+    detail: "With risk, evidence, recommendations, metrics, and full execution details.",
+  },
+];
+
+const ONBOARDING_STORAGE_KEY = "aegis_onboarding_seen";
+
+function OnboardingModal({ onTryDemo, onExplore, onSkip }: { onTryDemo: () => void; onExplore: () => void; onSkip: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent | globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        onSkip();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown as EventListener);
+    return () => window.removeEventListener("keydown", handleKeyDown as EventListener);
+  }, [onSkip]);
+
+  return (
+    <div className="onboarding-overlay" role="presentation" onClick={onSkip}>
+      <div
+        className="onboarding-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="onboarding-title">Welcome to Aegis</h2>
+        <p className="onboarding-modal__intro">
+          Aegis turns complex questions into structured intelligence by coordinating specialized AI
+          agents, retrieving relevant evidence, and evaluating the result.
+        </p>
+        <ol className="onboarding-steps">
+          {ONBOARDING_STEPS.map((step) => (
+            <li key={step.title}>
+              <strong>{step.title}</strong>
+              <span>{step.detail}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="onboarding-modal__actions">
+          <button type="button" className="run-button" onClick={onTryDemo}>
+            Try a Demo
+          </button>
+          <button type="button" className="scenario-chip" onClick={onExplore}>
+            Explore Aegis
+          </button>
+          <button type="button" className="onboarding-skip" onClick={onSkip}>
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [backendUrl, setBackendUrl] = useState(INITIAL_OPERATOR_STATE.backendUrl);
   const [backendHealth, setBackendHealth] = useState<BackendHealthState>({
@@ -463,6 +691,14 @@ export function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [missionDetail, setMissionDetail] = useState<RunDetailPayload | null>(null);
   const [missionDetailLoading, setMissionDetailLoading] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => typeof window !== "undefined" && !localStorage.getItem(ONBOARDING_STORAGE_KEY),
+  );
+  const [viewMode, setViewMode] = useState<"simple" | "advanced">("simple");
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [missionTipsOpen, setMissionTipsOpen] = useState(false);
+  const composerRef = useRef<HTMLFormElement | null>(null);
+  const howItWorksRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<OperatorRunState>({
     prompt: INITIAL_OPERATOR_STATE.prompt,
     response: null,
@@ -699,30 +935,73 @@ export function App() {
     }
   }
 
+  function dismissOnboarding() {
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    setShowOnboarding(false);
+  }
+
+  function handleOnboardingTryDemo() {
+    dismissOnboarding();
+    composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleOnboardingExplore() {
+    dismissOnboarding();
+    setHowItWorksOpen(true);
+    howItWorksRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const response = state.response;
+  const ragChunks = extractRagChunks(response?.tool_results ?? []);
 
   return (
     <div className="app-shell">
       <div className="app-shell__backdrop" aria-hidden="true" />
+      {showOnboarding ? (
+        <OnboardingModal
+          onTryDemo={handleOnboardingTryDemo}
+          onExplore={handleOnboardingExplore}
+          onSkip={dismissOnboarding}
+        />
+      ) : null}
       <main className="console">
         <header className="hero">
           <div>
-            <p className="hero__kicker">Aegis crisis decision copilot</p>
-            <h1 className="hero__title">Turn disruption signals into decisions.</h1>
+            <p className="hero__kicker">Aegis</p>
+            <h1 className="hero__title">Multi-Agent Intelligence for Complex Decisions</h1>
             <p className="hero__subtitle">
-              Generate a structured mission brief with risk score, top alerts, recommended actions,
-              and supporting evidence while preserving full routing and telemetry visibility.
+              Aegis coordinates specialized AI agents to investigate complex questions, ground findings
+              in evidence, evaluate results, and produce structured intelligence briefs.
             </p>
+            <div className="hero__cta">
+              <button
+                type="button"
+                className="run-button"
+                onClick={() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                Run a Mission
+              </button>
+              <button
+                type="button"
+                className="scenario-chip"
+                onClick={() => {
+                  setHowItWorksOpen(true);
+                  howItWorksRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              >
+                How Aegis Works
+              </button>
+            </div>
             {sessionStats.requests > 0 ? (
               <div className="session-stats">
-                <span>
+                <span title="Missions processed during this session.">
                   <strong>{sessionStats.requests}</strong> request{sessionStats.requests === 1 ? "" : "s"}
                 </span>
-                <span>
+                <span title="Cumulative estimated model/API cost for this session.">
                   <strong>${sessionStats.totalCostUsd.toFixed(6)}</strong> session cost
                 </span>
                 {sessionStats.blockedCount > 0 ? (
-                  <span className="session-stats__flag">
+                  <span className="session-stats__flag" title="Requests prevented by the safety layer.">
                     <strong>{sessionStats.blockedCount}</strong> blocked by safety policy
                   </span>
                 ) : null}
@@ -813,27 +1092,94 @@ export function App() {
           </div>
         </header>
 
-        <div className="scenario-chips">
+        <div ref={howItWorksRef}>
+          <Panel
+            eyebrow="How Aegis works"
+            title="Mission → Agents → Evidence → Analysis → Evaluation → Intelligence"
+            description="The same six stages run on every mission — you can watch them happen live in the execution trace below."
+            actions={
+              <button type="button" className="panel-action-button" onClick={() => setHowItWorksOpen((v) => !v)}>
+                {howItWorksOpen ? "Hide" : "Show"}
+              </button>
+            }
+          >
+            {howItWorksOpen ? (
+              <ol className="how-it-works">
+                {ARCHITECTURE_STEPS.map((step, index) => (
+                  <li key={step.title}>
+                    <span className="how-it-works__index">{index + 1}</span>
+                    <div>
+                      <strong>{step.title}</strong>
+                      <p>{step.detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted-copy">Click "Show" to see how a mission moves through Aegis, step by step.</p>
+            )}
+          </Panel>
+        </div>
+
+        <div className="scenario-cards">
           {SCENARIO_CHIPS.map((chip) => (
-            <button
-              key={chip.label}
-              type="button"
-              className="scenario-chip"
-              disabled={state.status === "loading"}
-              onClick={() => {
-                setState((current) => ({ ...current, prompt: chip.prompt }));
-                void runPrompt(chip.prompt);
-              }}
-            >
-              {chip.label}
-            </button>
+            <article key={chip.label} className="scenario-card">
+              <div className="scenario-card__icon" aria-hidden="true">
+                {chip.icon}
+              </div>
+              <h3>{chip.label}</h3>
+              <p className="scenario-card__description">{chip.description}</p>
+              <p className="scenario-card__example">"{chip.exampleQuestion}"</p>
+              <button
+                type="button"
+                className="scenario-card__try"
+                disabled={state.status === "loading"}
+                onClick={() => {
+                  setState((current) => ({ ...current, prompt: chip.prompt }));
+                  void runPrompt(chip.prompt);
+                }}
+              >
+                Try this
+              </button>
+            </article>
           ))}
         </div>
 
-        <form className="composer" onSubmit={handleSubmit}>
-          <label className="composer__label" htmlFor="prompt">
-            Task prompt
-          </label>
+        <form className="composer" onSubmit={handleSubmit} ref={composerRef}>
+          <div className="composer__label-row">
+            <label className="composer__label" htmlFor="prompt">
+              Describe your mission
+            </label>
+            <button
+              type="button"
+              className="composer__tips-toggle"
+              onClick={() => setMissionTipsOpen((v) => !v)}
+              aria-expanded={missionTipsOpen}
+            >
+              {missionTipsOpen ? "Hide tips" : "What should I ask?"}
+            </button>
+          </div>
+
+          {missionTipsOpen ? (
+            <div className="mission-tips">
+              <p>Describe what you want investigated, the relevant timeframe, and the outcome you want.</p>
+              <div className="mission-tips__examples">
+                <p>
+                  <span className="mission-tips__bad">Bad:</span> "{MISSION_TIP_EXAMPLES.bad}"
+                </p>
+                <p>
+                  <span className="mission-tips__good">Good:</span> "{MISSION_TIP_EXAMPLES.good}"
+                </p>
+              </div>
+              <ul>
+                <li>Be specific</li>
+                <li>Include a timeframe when relevant</li>
+                <li>Mention the company, event, market, or domain</li>
+                <li>Ask for a specific outcome</li>
+              </ul>
+            </div>
+          ) : null}
+
           <textarea
             id="prompt"
             className="composer__input"
@@ -841,40 +1187,45 @@ export function App() {
             onChange={(event) => setState((current) => ({ ...current, prompt: event.target.value }))}
             onKeyDown={handlePromptKeyDown}
             rows={5}
-            placeholder="Ask the system to research, summarize, compare, or route a task."
+            placeholder="Describe the situation you want Aegis to investigate."
           />
 
           <div className="agent-picker">
             <span className="agent-picker__label">Agent</span>
             <div className="agent-picker__options" role="radiogroup" aria-label="Agent selection">
-              {(
-                [
-                  { value: "auto", label: "Auto-route" },
-                  { value: "research", label: "Research" },
-                  { value: "analyst", label: "Analyst" },
-                  { value: "coder", label: "Coder" },
-                  { value: "document", label: "Document" },
-                  { value: "planner", label: "Planner" },
-                ] as const
-              ).map((option) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={agentOverride === "auto"}
+                title="The backend's agent_router picks based on task keywords."
+                className={`agent-picker__option${agentOverride === "auto" ? " agent-picker__option--active" : ""}`}
+                onClick={() => setAgentOverride("auto")}
+              >
+                Auto-route
+              </button>
+              {AGENT_INFO.map((agent) => (
                 <button
-                  key={option.value}
+                  key={agent.key}
                   type="button"
                   role="radio"
-                  aria-checked={agentOverride === option.value}
+                  aria-checked={agentOverride === agent.key}
+                  title={`${agent.tagline}. ${agent.description}`}
                   className={`agent-picker__option${
-                    agentOverride === option.value ? " agent-picker__option--active" : ""
+                    agentOverride === agent.key ? " agent-picker__option--active" : ""
                   }`}
-                  onClick={() => setAgentOverride(option.value)}
+                  onClick={() => setAgentOverride(agent.key)}
                 >
-                  {option.label}
+                  {agent.label}
                 </button>
               ))}
             </div>
             <p className="agent-picker__hint">
               {agentOverride === "auto"
-                ? "The backend's agent_router picks based on task keywords."
-                : `Forces routing.agent = "${agentOverride}" for this request (ChatRequest.agent_hint).`}
+                ? "Aegis picks the right agent automatically based on your mission."
+                : (() => {
+                    const info = AGENT_INFO.find((a) => a.key === agentOverride);
+                    return info ? `${info.tagline} — ${info.usefulWhen}` : "";
+                  })()}
             </p>
           </div>
 
@@ -908,11 +1259,17 @@ export function App() {
                 Continue conversation{" "}
                 <span className="feature-toggle__hint">
                   {conversationMode
-                    ? `Turn ${turnCount + 1} — the backend recalls prior turns via conversation_id`
-                    : "Off — each request is single-shot with no memory"}
+                    ? "Aegis can use relevant context from earlier messages in this conversation."
+                    : "Start a fresh independent mission."}
                 </span>
               </span>
             </label>
+
+            {conversationMode && conversationId ? (
+              <span className="conversation-active-pill" title={`Turn ${turnCount + 1} — context is being recalled from this conversation.`}>
+                ● Conversation context active
+              </span>
+            ) : null}
 
             {conversationMode && conversationId ? (
               <button
@@ -939,8 +1296,24 @@ export function App() {
 
         {state.status === "error" && state.error ? (
           <section className="state-banner state-banner--error" role="alert">
-            <strong>Request failed</strong>
-            <p>{state.error}</p>
+            <strong>Aegis couldn't complete this mission</strong>
+            <p>Something went wrong while processing your request.</p>
+            <div className="state-banner__actions">
+              <button type="button" className="scenario-chip" onClick={() => void runPrompt(state.prompt)}>
+                Try again
+              </button>
+              <button
+                type="button"
+                className="scenario-chip"
+                onClick={() => setState((current) => ({ ...current, status: "idle", error: null }))}
+              >
+                Start a new mission
+              </button>
+            </div>
+            <details className="error-technical">
+              <summary>Technical details</summary>
+              <pre className="response-copy">{state.error}</pre>
+            </details>
           </section>
         ) : null}
 
@@ -964,7 +1337,11 @@ export function App() {
               {transcript.map((message, index) => (
                 <div key={index} className={`chat-bubble chat-bubble--${message.role}`}>
                   <span className="chat-bubble__role">
-                    {message.role === "user" ? "You" : message.agent ?? "assistant"}
+                    {message.role === "user"
+                      ? "You"
+                      : message.agent
+                      ? `Aegis · ${message.agent.charAt(0).toUpperCase()}${message.agent.slice(1)} Agent`
+                      : "Aegis"}
                   </span>
                   <p>{message.content}</p>
                 </div>
@@ -973,11 +1350,34 @@ export function App() {
           </Panel>
         ) : null}
 
+        {response ? (
+          <div className="view-mode-toggle" role="radiogroup" aria-label="Detail level">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === "simple"}
+              className={`view-mode-toggle__option${viewMode === "simple" ? " view-mode-toggle__option--active" : ""}`}
+              onClick={() => setViewMode("simple")}
+            >
+              Simple View
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === "advanced"}
+              className={`view-mode-toggle__option${viewMode === "advanced" ? " view-mode-toggle__option--active" : ""}`}
+              onClick={() => setViewMode("advanced")}
+            >
+              Advanced View
+            </button>
+          </div>
+        ) : null}
+
         <section className="grid">
           <div className="grid__main">
             <Panel
               eyebrow="Mission Brief"
-              title="Crisis decision dashboard"
+              title="Intelligence Brief"
               description="Structured analysis extracted from the latest backend response."
             >
               {missionBrief && response ? (
@@ -985,16 +1385,27 @@ export function App() {
                   <div className="mission-score">
                     <RiskGauge score={missionBrief.riskScore} level={missionBrief.riskLevel} />
                     <div className="mission-score__body">
-                      <p className="mission-score__label">Risk score</p>
+                      <p className="mission-score__label" title="Estimated severity or likelihood of the risk identified by the analysis.">
+                        Risk
+                      </p>
                       <p className="mission-score__summary">{missionBrief.summary}</p>
                       <div className="mission-score__badges">
-                        <span className={`risk-pill risk-pill--${missionBrief.riskLevel}`}>
+                        <span
+                          className={`risk-pill risk-pill--${missionBrief.riskLevel}`}
+                          title="Estimated severity or likelihood of the risk identified by the analysis."
+                        >
                           {missionBrief.riskLevel} risk
+                        </span>
+                        <span
+                          className="confidence-pill"
+                          title="How strongly the agent's routing confidence and retrieved evidence support this assessment."
+                        >
+                          {formatConfidence(response.routing.confidence)} confidence
                         </span>
                         {response?.evaluation ? (
                           <span
                             className="quality-pill"
-                            title="Deterministic quality score: how well-formed the brief is, and whether the response actually used retrieved context."
+                            title="A structured evaluation of the response: how well-formed the brief is, and whether it actually used retrieved evidence."
                           >
                             {Math.round(response.evaluation.overall_score * 100)}% quality
                           </span>
@@ -1002,13 +1413,13 @@ export function App() {
                         {response?.cost ? (
                           <span
                             className="cost-pill"
-                            title={`${response.cost.input_tokens} input + ${response.cost.output_tokens} output tokens on ${response.cost.model}`}
+                            title={`Estimated model/API cost for this mission — ${response.cost.input_tokens} input + ${response.cost.output_tokens} output tokens on ${response.cost.model}.`}
                           >
                             ~${response.cost.cost_usd.toFixed(6)}
                           </span>
                         ) : null}
                         {response?.moderation?.pii_flags && response.moderation.pii_flags.length > 0 ? (
-                          <span className="pii-pill" title="Response text matched a PII-shaped pattern (e.g. email/phone) — flagged for review, not redacted.">
+                          <span className="pii-pill" title="Indicates whether potentially sensitive personal information (e.g. email/phone) was detected — flagged for review, not redacted.">
                             ⚠ PII flagged: {response.moderation.pii_flags.join(", ")}
                           </span>
                         ) : null}
@@ -1019,7 +1430,7 @@ export function App() {
                   <div className="decision-grid">
                     <article className="decision-card">
                       <div className="decision-card__header">
-                        <h3>Top alerts</h3>
+                        <h3>Key findings</h3>
                         <button
                           type="button"
                           className="copy-btn"
@@ -1064,50 +1475,92 @@ export function App() {
                           {copiedKey === "evidence" ? "Copied" : "Copy"}
                         </button>
                       </div>
-                      <ul className="decision-list">
-                        {missionBrief.evidence.map((item, index) => (
-                          <li key={`evidence-${index}`}>{item}</li>
-                        ))}
-                      </ul>
+                      {ragChunks.length > 0 ? (
+                        <div className="evidence-cards">
+                          {ragChunks.map((chunk) => (
+                            <details key={chunk.id} className="evidence-card">
+                              <summary>
+                                <span className="evidence-card__source">{chunk.source.replace(/-/g, " ")}</span>
+                                <span
+                                  className="evidence-card__relevance"
+                                  title="How closely this retrieved document matched the mission."
+                                >
+                                  {Math.round(chunk.score * 100)}% relevant
+                                </span>
+                              </summary>
+                              <p className="evidence-card__excerpt">{chunk.text.trim().slice(0, 320)}</p>
+                            </details>
+                          ))}
+                        </div>
+                      ) : (
+                        <ul className="decision-list">
+                          {missionBrief.evidence.map((item, index) => (
+                            <li key={`evidence-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
                     </article>
                   </div>
 
-                  <details className="raw-output">
-                    <summary>Full model output</summary>
-                    <button
-                      type="button"
-                      className="copy-btn copy-btn--floating"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        copyToClipboard(response.content, "raw-output");
-                      }}
-                    >
-                      {copiedKey === "raw-output" ? "Copied" : "Copy"}
-                    </button>
-                    <pre className="response-copy">{response.content}</pre>
-                  </details>
+                  {viewMode === "advanced" ? (
+                    <>
+                      <details className="raw-output">
+                        <summary>Full model output</summary>
+                        <button
+                          type="button"
+                          className="copy-btn copy-btn--floating"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            copyToClipboard(response.content, "raw-output");
+                          }}
+                        >
+                          {copiedKey === "raw-output" ? "Copied" : "Copy"}
+                        </button>
+                        <pre className="response-copy">{response.content}</pre>
+                      </details>
 
-                  {response.sub_results && response.sub_results.length > 0 ? (
-                    <div className="sub-results">
-                      <h3>Sub-agent results ({response.sub_results.length})</h3>
-                      {response.sub_results.map((sub, index) => (
-                        <details key={index} className="sub-results__item">
-                          <summary>
-                            Sub-task {index + 1} — handled by <strong>{sub.routing.agent}</strong>
-                            {sub.mission_brief ? ` · ${sub.mission_brief.risk_level} risk` : ""}
-                          </summary>
-                          <pre className="response-copy">{sub.content}</pre>
-                        </details>
-                      ))}
-                    </div>
+                      {response.sub_results && response.sub_results.length > 0 ? (
+                        <div className="sub-results">
+                          <h3>Agent execution ({response.sub_results.length} sub-agents)</h3>
+                          {response.sub_results.map((sub, index) => (
+                            <details key={index} className="sub-results__item">
+                              <summary>
+                                Sub-task {index + 1} — handled by <strong>{sub.routing.agent}</strong>
+                                {sub.mission_brief ? ` · ${sub.mission_brief.risk_level} risk` : ""}
+                              </summary>
+                              <pre className="response-copy">{sub.content}</pre>
+                            </details>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               ) : response?.moderation?.blocked ? (
-                <div className="moderation-blocked">
-                  <strong>Request blocked by safety policy</strong>
-                  <p>{response.moderation.block_reason}</p>
-                  <p className="muted-copy">No LLM call was made — this was screened before reaching the model.</p>
-                </div>
+                (() => {
+                  const explanation = friendlyModerationMessage();
+                  return (
+                    <div className="moderation-blocked">
+                      <strong>Request blocked</strong>
+                      <p>
+                        Aegis detected a request that could interfere with the safe operation of the
+                        system.
+                      </p>
+                      <div className="moderation-blocked__section">
+                        <h4>Reason</h4>
+                        <p>{explanation.reason}</p>
+                      </div>
+                      <div className="moderation-blocked__section">
+                        <h4>What happened?</h4>
+                        <p>{explanation.whatHappened}</p>
+                      </div>
+                      <div className="moderation-blocked__section">
+                        <h4>What can I do?</h4>
+                        <p>{explanation.whatToDo}</p>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="empty-state">
                   <p>No mission brief yet.</p>
@@ -1117,46 +1570,48 @@ export function App() {
             </Panel>
           </div>
 
-          <div className="grid__aside">
-            <Panel
-              eyebrow="Routing"
-              title="Agent and model metadata"
-              description="The backend decides this; the UI only renders it."
-            >
-              {response ? (
-                <dl className="detail-list">
-                  <div>
-                    <dt>Selected agent</dt>
-                    <dd>{response.routing.agent}</dd>
+          {viewMode === "advanced" ? (
+            <div className="grid__aside">
+              <Panel
+                eyebrow="Routing"
+                title="Agent and model metadata"
+                description="The backend decides this; the UI only renders it."
+              >
+                {response ? (
+                  <dl className="detail-list">
+                    <div>
+                      <dt>Selected agent</dt>
+                      <dd>{response.routing.agent}</dd>
+                    </div>
+                    <div>
+                      <dt>Model</dt>
+                      <dd>{response.routing.model}</dd>
+                    </div>
+                    <div>
+                      <dt>Provider</dt>
+                      <dd>{response.routing.provider}</dd>
+                    </div>
+                    <div>
+                      <dt title="How strongly the agent router's rule matched this task.">Confidence</dt>
+                      <dd>{formatConfidence(response.routing.confidence)}</dd>
+                    </div>
+                    <div>
+                      <dt>Preference</dt>
+                      <dd>{response.routing.preference ?? "balanced"}</dd>
+                    </div>
+                    <div>
+                      <dt>Reason</dt>
+                      <dd>{response.routing.reason}</dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <div className="empty-state">
+                    <p>Routing metadata will appear here.</p>
                   </div>
-                  <div>
-                    <dt>Model</dt>
-                    <dd>{response.routing.model}</dd>
-                  </div>
-                  <div>
-                    <dt>Provider</dt>
-                    <dd>{response.routing.provider}</dd>
-                  </div>
-                  <div>
-                    <dt>Confidence</dt>
-                    <dd>{formatConfidence(response.routing.confidence)}</dd>
-                  </div>
-                  <div>
-                    <dt>Preference</dt>
-                    <dd>{response.routing.preference ?? "balanced"}</dd>
-                  </div>
-                  <div>
-                    <dt>Reason</dt>
-                    <dd>{response.routing.reason}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <div className="empty-state">
-                  <p>Routing metadata will appear here.</p>
-                </div>
-              )}
-            </Panel>
-          </div>
+                )}
+              </Panel>
+            </div>
+          ) : null}
 
           <div className="grid__full">
             <Panel
@@ -1184,22 +1639,56 @@ export function App() {
                       </div>
                       <p className="history-prompt">{record.prompt}</p>
                       {record.status === "success" ? (
-                        <p className="history-meta">
-                          {record.agent} · {record.model} · {record.provider}
-                          {record.latencyMs != null ? ` · ${Math.round(record.latencyMs)} ms` : ""}
-                        </p>
+                        <>
+                          <p className="history-meta">
+                            {record.agent} · {record.model} · {record.provider}
+                            {record.latencyMs != null ? ` · ${Math.round(record.latencyMs)} ms` : ""}
+                          </p>
+                          <div className="history-badges">
+                            {record.riskLevel ? (
+                              <span className={`risk-pill risk-pill--${record.riskLevel}`}>{record.riskLevel} risk</span>
+                            ) : null}
+                            {record.qualityScore != null ? (
+                              <span className="quality-pill">{Math.round(record.qualityScore * 100)}% quality</span>
+                            ) : null}
+                            {record.costUsd != null ? (
+                              <span className="cost-pill">~${record.costUsd.toFixed(6)}</span>
+                            ) : null}
+                          </div>
+                        </>
                       ) : (
                         <p className="history-error">{record.error}</p>
                       )}
-                      {authToken && record.runId ? (
+                      <div className="history-actions">
                         <button
                           type="button"
                           className="copy-btn"
-                          onClick={() => void loadMissionDetail(record.runId!)}
+                          onClick={() => copyToClipboard(record.prompt, `history-${record.id}`)}
                         >
-                          {missionDetailLoading === record.runId ? "Loading…" : "View agent steps"}
+                          {copiedKey === `history-${record.id}` ? "Copied" : "Copy prompt"}
                         </button>
-                      ) : null}
+                        {record.status === "success" ? (
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={() => {
+                              setState((current) => ({ ...current, prompt: record.prompt }));
+                              composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }}
+                          >
+                            Open
+                          </button>
+                        ) : null}
+                        {authToken && record.runId ? (
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={() => void loadMissionDetail(record.runId!)}
+                          >
+                            {missionDetailLoading === record.runId ? "Loading…" : "View agent steps"}
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1258,6 +1747,7 @@ export function App() {
             </div>
           ) : null}
 
+          {viewMode === "advanced" ? (
           <div className="grid__full">
             <Panel
               eyebrow="Telemetry"
@@ -1348,6 +1838,48 @@ export function App() {
                   )}
                 </div>
               </div>
+            </Panel>
+          </div>
+          ) : null}
+
+          <div className="grid__full">
+            <Panel
+              eyebrow="Why trust this result?"
+              title="Transparency checklist"
+              description="Only capabilities Aegis actually implements — nothing aspirational."
+            >
+              <ul className="trust-list">
+                {TRUST_ITEMS.map((item) => (
+                  <li key={item}>
+                    <span aria-hidden="true">✓</span> {item}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
+
+          <div className="grid__full">
+            <Panel
+              eyebrow="About Aegis"
+              title="Architecture"
+              description="For recruiters and technical reviewers — how a mission actually moves through the system."
+            >
+              <div className="architecture-flow">
+                {["Frontend", "FastAPI", "Orchestrator", "Specialized Agents", "RAG + Evidence", "Safety", "Evaluation", "Mission Brief"].map(
+                  (stage, index, all) => (
+                    <span key={stage} className="architecture-flow__stage">
+                      {stage}
+                      {index < all.length - 1 ? <span aria-hidden="true"> → </span> : null}
+                    </span>
+                  ),
+                )}
+              </div>
+              <h4 className="architecture-highlights__title">Engineering highlights</h4>
+              <ul className="architecture-highlights">
+                {ENGINEERING_HIGHLIGHTS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </Panel>
           </div>
         </section>

@@ -40,6 +40,27 @@ mission history with real per-agent observability: exact duration, tokens, and c
 every agent actually dispatched in a mission (not estimated after the fact — persisted from
 the same checkpoints the live trace already streams).
 
+## Using it
+
+First visit shows a short onboarding overlay explaining the mission → plan → agents →
+evidence → evaluation → brief flow (skippable, shown once). From there:
+
+- **Four scenario cards** (Supply Chain, Cybersecurity, Market Intelligence, Disaster
+  Response) each with a description and example question — click "Try this" to run a real
+  mission through the real backend, no fake data.
+- **Manual agent picker**, with a plain-language description of what each of the five agents
+  does and when it's useful, alongside auto-routing.
+- **Simple / Advanced view toggle** on the result — Simple shows risk, confidence, findings,
+  actions, and evidence; Advanced adds routing metadata, raw model output, per-agent
+  sub-results, and telemetry.
+- **Live execution trace** with human-readable stage descriptions (e.g. "Retrieving
+  evidence" instead of a raw event name) — every step shown is a real backend checkpoint
+  streamed over SSE, not a simulated progress bar.
+- **Evidence cards** showing the actual retrieved source and relevance score when RAG
+  context was used, not just extracted sentences.
+- A compact "Why trust this result?" and "About Aegis / Architecture" section near the
+  bottom of the page, for anyone who wants the engineering story without reading the repo.
+
 ## Architecture at a glance
 
 ```mermaid
@@ -93,3 +114,17 @@ Then open `http://127.0.0.1:5173` and point the "Backend target" field at
 For a live provider instead of mock, set `MODEL_PROVIDER` and the matching API key in
 `backend/.env` (e.g. `OPENAI_API_KEY` + `OPENAI_BASE_URL` for an OpenAI-compatible gateway,
 or `GEMINI_API_KEY` for Gemini).
+
+## Testing
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pytest -q
+
+cd ..\frontend
+npx tsc --noEmit -p .
+npm test
+npm run build
+```
+
+CI runs all of the above on every push.

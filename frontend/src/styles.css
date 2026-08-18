@@ -1222,3 +1222,532 @@ button {
     flex-direction: column;
   }
 }
+
+/* ===== Product-story / onboarding / polish additions ===== */
+
+.hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+/* --- Onboarding modal --- */
+
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.onboarding-modal {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(18, 26, 36, 0.98), rgba(11, 16, 22, 0.96));
+  box-shadow: var(--shadow);
+}
+
+.onboarding-modal h2 {
+  margin: 0 0 10px;
+}
+
+.onboarding-modal__intro {
+  color: #c8d6e3;
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+
+.onboarding-steps {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.onboarding-steps li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(9, 15, 22, 0.5);
+  border: 1px solid var(--line);
+}
+
+.onboarding-steps li span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.onboarding-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-skip {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* --- How Aegis works --- */
+
+.how-it-works {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.how-it-works li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.how-it-works__index {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--accent);
+  border: 1px solid rgba(79, 209, 197, 0.4);
+  background: rgba(79, 209, 197, 0.1);
+}
+
+.how-it-works li strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.how-it-works li p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* --- Scenario cards --- */
+
+.scenario-cards {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.scenario-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(15, 23, 32, 0.85), rgba(9, 15, 22, 0.7));
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+
+.scenario-card:hover {
+  border-color: rgba(79, 209, 197, 0.4);
+  transform: translateY(-2px);
+}
+
+.scenario-card__icon {
+  font-size: 1.6rem;
+}
+
+.scenario-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.scenario-card__description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.scenario-card__example {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #c8d6e3;
+  font-style: italic;
+}
+
+.scenario-card__try {
+  margin-top: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+  justify-self: start;
+}
+
+.scenario-card__try:hover:not(:disabled) {
+  background: var(--accent);
+  color: #04140f;
+}
+
+.scenario-card__try:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Composer tips --- */
+
+.composer__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.composer__tips-toggle {
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.mission-tips {
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(9, 15, 22, 0.5);
+  font-size: 0.84rem;
+  color: #c8d6e3;
+  display: grid;
+  gap: 8px;
+}
+
+.mission-tips__examples p {
+  margin: 0;
+}
+
+.mission-tips__bad {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.mission-tips__good {
+  color: #7cf0b7;
+  font-weight: 700;
+}
+
+.mission-tips ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+/* --- Conversation active pill --- */
+
+.conversation-active-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #7cf0b7;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+}
+
+/* --- Error state --- */
+
+.state-banner__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.error-technical {
+  margin-top: 8px;
+}
+
+.error-technical summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* --- Moderation blocked --- */
+
+.moderation-blocked__section {
+  margin-top: 10px;
+}
+
+.moderation-blocked__section h4 {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.moderation-blocked__section p {
+  margin: 0;
+  color: #e8f1fb;
+  line-height: 1.5;
+}
+
+/* --- View mode toggle --- */
+
+.view-mode-toggle {
+  display: inline-flex;
+  margin-top: 18px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(9, 15, 22, 0.6);
+  gap: 2px;
+}
+
+.view-mode-toggle__option {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.view-mode-toggle__option--active {
+  background: var(--accent);
+  color: #04140f;
+}
+
+/* --- Confidence pill (mirrors quality-pill styling) --- */
+
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.14);
+  border: 1px solid rgba(129, 140, 248, 0.32);
+  cursor: help;
+}
+
+/* --- Evidence cards --- */
+
+.evidence-cards {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(9, 15, 22, 0.5);
+}
+
+.evidence-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+
+.evidence-card__source {
+  text-transform: capitalize;
+  font-weight: 700;
+}
+
+.evidence-card__relevance {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--accent);
+  cursor: help;
+}
+
+.evidence-card__excerpt {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* --- Mission history badges/actions --- */
+
+.history-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.history-badges .risk-pill,
+.history-badges .quality-pill,
+.history-badges .cost-pill {
+  padding: 4px 9px;
+  font-size: 0.62rem;
+}
+
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* --- Trust list --- */
+
+.trust-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.trust-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: #e8f1fb;
+}
+
+.trust-list li span {
+  color: #7cf0b7;
+  font-weight: 800;
+}
+
+/* --- Architecture / about --- */
+
+.architecture-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.architecture-flow__stage {
+  color: #c8d6e3;
+  font-weight: 600;
+}
+
+.architecture-highlights__title {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.architecture-highlights {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  color: #c8d6e3;
+  font-size: 0.82rem;
+}
+
+/* ===== Additional responsive breakpoints ===== */
+
+@media (max-width: 1024px) {
+  .decision-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .decision-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+
+  .hero__meta,
+  .auth-widget {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .agent-picker__options {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .onboarding-modal {
+    padding: 20px;
+  }
+
+  .hero__cta {
+    flex-direction: column;
+  }
+
+  .hero__cta .run-button,
+  .hero__cta .scenario-chip {
+    width: 100%;
+    text-align: center;
+  }
+
+  .mission-score {
+    text-align: center;
+  }
+
+  .risk-gauge {
+    margin: 0 auto;
+  }
+}
