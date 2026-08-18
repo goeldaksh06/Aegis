@@ -3,15 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.agents.orchestrator import run_orchestrated_plan
-from app.api.chat_service import ChatService, agent_result_to_response
+from app.api.chat_service import ChatService, _collect_generation_steps, agent_result_to_response
 from app.app_container import get_chat_service
-from app.database.db import save_run
+from app.auth.dependencies import get_current_user_optional
+from app.database.db import User, save_agent_steps, save_run
 from app.models.schemas import AgentRoutingInput, AgentResult, AgentType, ChatMessage, ChatRequest
 
 router = APIRouter()
@@ -32,6 +34,7 @@ def _prompt_text(messages: list[ChatMessage]) -> str:
 async def chat_stream(
     request: ChatRequest,
     chat_service: ChatService = Depends(get_chat_service),
+    current_user: User | None = Depends(get_current_user_optional),
 ) -> StreamingResponse:
     """Server-Sent Events view of the exact same pipeline POST /chat runs.
 
@@ -44,9 +47,11 @@ async def chat_stream(
     and — when request.orchestrate is set — per-sub-agent handoffs) as they happen, instead
     of only returning the final result.
     """
+    user_id = current_user.id if current_user else None
 
     async def event_generator() -> AsyncIterator[str]:
         start = time.perf_counter()
+        run_id = str(uuid.uuid4())
         yield _sse("received", {"message_count": len(request.messages)})
 
         agent_input = AgentRoutingInput(
@@ -71,8 +76,11 @@ async def chat_stream(
             return
 
         queue: asyncio.Queue[tuple[object, object]] = asyncio.Queue()
+        generation_events: list[dict[str, object]] = []
 
         async def on_stage(name: str, data: dict[str, object]) -> None:
+            if name == "generation":
+                generation_events.append(data)
             await queue.put((name, data))
 
         async def run_agent() -> None:
@@ -110,13 +118,22 @@ async def chat_stream(
         await task
 
         if error_message is not None or agent_result is None:
-            await save_run(prompt=agent_input.task, status="error", agent=decision.agent.value, error=error_message)
+            await save_run(
+                id=run_id,
+                user_id=user_id,
+                prompt=agent_input.task,
+                status="error",
+                agent=decision.agent.value,
+                error=error_message,
+            )
             yield _sse("error", {"message": error_message or "Agent produced no result."})
             return
 
-        response = agent_result_to_response(agent_result, sub_results)
+        response = agent_result_to_response(agent_result, sub_results, run_id=run_id)
 
         await save_run(
+            id=run_id,
+            user_id=user_id,
             prompt=agent_input.task,
             status="success",
             agent=decision.agent.value,
@@ -128,6 +145,7 @@ async def chat_stream(
             moderation_blocked=agent_result.moderation.blocked if agent_result.moderation else None,
             conversation_id=agent_result.conversation_id,
         )
+        await save_agent_steps(run_id, _collect_generation_steps(generation_events))
 
         yield _sse(
             "persisted",

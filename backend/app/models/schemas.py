@@ -249,6 +249,7 @@ class ChatResponse(AegisSchema):
 	moderation: ModerationResult | None = None
 	conversation_id: str | None = None
 	sub_results: list["ChatResponse"] = Field(default_factory=list)
+	run_id: str | None = None
 
 
 class RunRecordOut(AegisSchema):
@@ -263,6 +264,52 @@ class RunRecordOut(AegisSchema):
 	risk_score: float | None = None
 	latency_ms: float | None = None
 	error: str | None = None
+	cost_usd: float | None = None
+	moderation_blocked: bool | None = None
+	conversation_id: str | None = None
+
+
+class AgentStepOut(AegisSchema):
+	agent: str
+	step_index: int
+	model: str | None = None
+	provider: str | None = None
+	duration_ms: float | None = None
+	input_tokens: int | None = None
+	output_tokens: int | None = None
+	cost_usd: float | None = None
+	retrieved_count: int | None = None
+	status: str = "ok"
+	error: str | None = None
+
+
+class RunDetailOut(RunRecordOut):
+	steps: list[AgentStepOut] = Field(default_factory=list)
+	total_duration_ms: float | None = None
+	total_tokens: int | None = None
+	total_cost_usd: float | None = None
+
+
+class RegisterRequest(AegisSchema):
+	email: str = Field(min_length=3, max_length=254)
+	password: str = Field(min_length=8, max_length=256)
+
+
+class LoginRequest(AegisSchema):
+	email: str
+	password: str
+
+
+class UserOut(AegisSchema):
+	id: str
+	email: str
+	created_at: datetime
+
+
+class TokenResponse(AegisSchema):
+	access_token: str
+	token_type: str = "bearer"
+	user: UserOut
 
 
 class ErrorResponse(AegisSchema):

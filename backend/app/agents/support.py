@@ -48,9 +48,11 @@ def _sanitize_provider_text(text: str) -> str:
     return text.replace("�", "-")
 
 
-async def _emit(on_stage: StageCallback | None, name: str, data: dict[str, object]) -> None:
+async def _emit(
+    on_stage: StageCallback | None, name: str, data: dict[str, object], *, agent_name: str
+) -> None:
     if on_stage is not None:
-        await on_stage(name, data)
+        await on_stage(name, {**data, "agent": agent_name})
 
 
 async def execute_agent_turn(
@@ -77,6 +79,7 @@ async def execute_agent_turn(
         on_stage,
         "moderation",
         {"blocked": moderation.blocked, "reason": moderation.block_reason},
+        agent_name=agent_name,
     )
     if moderation.blocked:
         return AgentResult(
@@ -95,7 +98,12 @@ async def execute_agent_turn(
     prior_messages: list[ChatMessage] = []
     if request.conversation_id:
         prior_messages = await load_prior_messages(request.conversation_id)
-        await _emit(on_stage, "memory", {"prior_message_count": len(prior_messages)})
+        await _emit(
+            on_stage,
+            "memory",
+            {"prior_message_count": len(prior_messages)},
+            agent_name=agent_name,
+        )
 
     # RAG relevance is queried on the current turn only — including the full conversation
     # history in the retrieval query would dilute it with old context. The LLM, however, gets
@@ -104,6 +112,7 @@ async def execute_agent_turn(
     llm_prompt = build_prompt(effective_messages)
 
     tool_results: list[dict[str, object]] = []
+    retrieved_count = 0
 
     if rag_tool is not None:
         rag_start = time.perf_counter()
@@ -111,6 +120,7 @@ async def execute_agent_turn(
             ToolRequest(tool_type=ToolType.RAG, input=current_turn_prompt, metadata={"top_k": 5})
         )
         tool_results.append(rag_result.model_dump())
+        retrieved_count = rag_result.metadata.get("retrieved_count", 0)
 
         if rag_result.success and rag_result.output.strip():
             system_prompt = f"{system_prompt}\n\nRelevant retrieved context:\n{rag_result.output}"
@@ -119,7 +129,7 @@ async def execute_agent_turn(
             on_stage,
             "retrieval",
             {
-                "retrieved_count": rag_result.metadata.get("retrieved_count", 0),
+                "retrieved_count": retrieved_count,
                 "sources": sorted(
                     {
                         chunk.get("metadata", {}).get("source", "unknown")
@@ -128,6 +138,7 @@ async def execute_agent_turn(
                 ),
                 "elapsed_ms": round((time.perf_counter() - rag_start) * 1000, 1),
             },
+            agent_name=agent_name,
         )
 
     llm_start = time.perf_counter()
@@ -145,16 +156,7 @@ async def execute_agent_turn(
         ),
         system_prompt=system_prompt,
     )
-    await _emit(
-        on_stage,
-        "generation",
-        {
-            "provider": execution.routing.provider,
-            "model": execution.routing.model,
-            "elapsed_ms": round((time.perf_counter() - llm_start) * 1000, 1),
-            "output_tokens": execution.response.output_tokens,
-        },
-    )
+    generation_elapsed_ms = round((time.perf_counter() - llm_start) * 1000, 1)
 
     cost = CostEstimate(
         input_tokens=execution.response.input_tokens or 0,
@@ -165,7 +167,26 @@ async def execute_agent_turn(
         model=execution.routing.model,
         provider=execution.routing.provider,
     )
-    await _emit(on_stage, "cost", {"cost_usd": cost.cost_usd, "model": cost.model})
+
+    # "generation" carries everything one AgentStep observability row needs (duration,
+    # tokens, cost, retrieval count) in a single event, so persistence doesn't have to
+    # cross-reference separate events. "cost" is still emitted separately right after so the
+    # live execution-trace UI keeps its existing dedicated cost-stage card.
+    await _emit(
+        on_stage,
+        "generation",
+        {
+            "provider": execution.routing.provider,
+            "model": execution.routing.model,
+            "elapsed_ms": generation_elapsed_ms,
+            "input_tokens": cost.input_tokens,
+            "output_tokens": cost.output_tokens,
+            "cost_usd": cost.cost_usd,
+            "retrieved_count": retrieved_count,
+        },
+        agent_name=agent_name,
+    )
+    await _emit(on_stage, "cost", {"cost_usd": cost.cost_usd, "model": cost.model}, agent_name=agent_name)
 
     content = _sanitize_provider_text(execution.response.content)
     moderation = moderation.model_copy(update={"pii_flags": screen_response_for_pii(content)})
@@ -178,6 +199,7 @@ async def execute_agent_turn(
             "risk_score": mission_brief.risk_score if mission_brief else None,
             "risk_level": mission_brief.risk_level.value if mission_brief else None,
         },
+        agent_name=agent_name,
     )
 
     evaluation = evaluate_response(content, mission_brief, tool_results)
@@ -202,6 +224,7 @@ async def execute_agent_turn(
             "groundedness": evaluation.groundedness,
             "structure_quality": evaluation.structure_quality,
         },
+        agent_name=agent_name,
     )
 
     if request.conversation_id:

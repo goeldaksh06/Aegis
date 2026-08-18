@@ -31,8 +31,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Internal working docs / local-only test suites (not part of the published repo)
+# Internal working notes (not part of the published repo)
 CLAUDE.md
-backend/tests/
-frontend/src/**/*.test.ts
-frontend/src/**/*.test.tsx

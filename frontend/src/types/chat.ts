@@ -84,6 +84,7 @@ export interface ChatResponse {
   moderation?: ModerationResult | null;
   conversation_id?: string | null;
   sub_results?: ChatResponse[];
+  run_id?: string | null;
 }
 
 export interface OperatorRunState {
@@ -95,6 +96,7 @@ export interface OperatorRunState {
 
 export interface OperatorRunRecord {
   id: string;
+  runId?: string | null;
   createdAt: string;
   prompt: string;
   status: "success" | "error";

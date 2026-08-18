@@ -150,6 +150,114 @@ button {
   color: var(--accent);
 }
 
+.auth-widget {
+  min-width: min(320px, 100%);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(6, 10, 15, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.auth-widget__signed-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+
+.auth-widget__form {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-widget__tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.auth-widget__tab {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-widget__tab--active {
+  background: var(--accent);
+  color: #04140f;
+  border-color: var(--accent);
+}
+
+.auth-widget__error {
+  color: var(--error);
+  font-size: 0.76rem;
+}
+
+.auth-widget__hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.mission-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.mission-steps__item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(9, 15, 22, 0.5);
+  font-size: 0.82rem;
+}
+
+.mission-steps__agent {
+  font-weight: 800;
+  text-transform: capitalize;
+  color: var(--text);
+}
+
+.mission-steps__stat {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mission-steps__model {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mission-steps__total {
+  display: flex;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(79, 209, 197, 0.32);
+  background: rgba(79, 209, 197, 0.08);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .endpoint-input,
 .composer__input {
   width: 100%;

@@ -1,8 +1,9 @@
 import { KeyboardEvent, FormEvent, useEffect, useState } from "react";
 
+import { login as apiLogin, register as apiRegister, type UserPayload } from "./api/authClient";
 import { runChatStream, type TraceStageEvent } from "./api/chatStreamClient";
 import { checkBackendHealth } from "./api/healthClient";
-import { fetchPersistedRuns } from "./api/runsClient";
+import { fetchPersistedRuns, fetchRunDetail, type RunDetailPayload } from "./api/runsClient";
 import { Panel } from "./components/Panel";
 import {
   loadOperatorConsoleState,
@@ -242,6 +243,7 @@ function buildHistoryRecord(
 
   return {
     id: `${now.getTime()}-success`,
+    runId: response.run_id ?? null,
     createdAt: now.toISOString(),
     prompt,
     status: "success",
@@ -447,6 +449,20 @@ export function App() {
   >([]);
   const [sessionStats, setSessionStats] = useState({ requests: 0, totalCostUsd: 0, blockedCount: 0 });
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(() =>
+    localStorage.getItem("aegis_auth_token"),
+  );
+  const [authUser, setAuthUser] = useState<UserPayload | null>(() => {
+    const raw = localStorage.getItem("aegis_auth_user");
+    return raw ? (JSON.parse(raw) as UserPayload) : null;
+  });
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [missionDetail, setMissionDetail] = useState<RunDetailPayload | null>(null);
+  const [missionDetailLoading, setMissionDetailLoading] = useState<string | null>(null);
   const [state, setState] = useState<OperatorRunState>({
     prompt: INITIAL_OPERATOR_STATE.prompt,
     response: null,
@@ -490,31 +506,34 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchPersistedRuns({ baseUrl: backendUrl }, controller.signal)
-      .then((records) => {
-        setRunHistory(
-          records.slice(0, RUN_HISTORY_LIMIT).map((record) => ({
-            id: record.id,
-            createdAt: record.created_at,
-            prompt: record.prompt,
-            status: record.status,
-            agent: record.agent ?? undefined,
-            model: record.model ?? undefined,
-            provider: record.provider ?? undefined,
-            latencyMs: record.latency_ms ?? undefined,
-            error: record.error ?? undefined,
-          })),
-        );
-      })
-      .catch(() => {
-        // Backend history is a convenience seed, not required — local history still
-        // accumulates via buildHistoryRecord() on each run regardless.
-      });
+    if (authToken) {
+      fetchPersistedRuns({ baseUrl: backendUrl }, authToken, controller.signal)
+        .then((records) => {
+          setRunHistory(
+            records.slice(0, RUN_HISTORY_LIMIT).map((record) => ({
+              id: record.id,
+              runId: record.id,
+              createdAt: record.created_at,
+              prompt: record.prompt,
+              status: record.status,
+              agent: record.agent ?? undefined,
+              model: record.model ?? undefined,
+              provider: record.provider ?? undefined,
+              latencyMs: record.latency_ms ?? undefined,
+              error: record.error ?? undefined,
+            })),
+          );
+        })
+        .catch(() => {
+          // Backend history is a convenience seed, not required — local history still
+          // accumulates via buildHistoryRecord() on each run regardless.
+        });
+    }
 
     return () => {
       controller.abort();
     };
-  }, [backendUrl]);
+  }, [backendUrl, authToken]);
 
   useEffect(() => {
     saveOperatorConsoleState({
@@ -544,6 +563,7 @@ export function App() {
             setTraceEvents((current) => [...current, event]);
           }
         },
+        authToken,
       );
 
       if (conversationMode && response.conversation_id) {
@@ -630,6 +650,55 @@ export function App() {
     }
   }
 
+  function persistAuth(token: string, user: UserPayload) {
+    localStorage.setItem("aegis_auth_token", token);
+    localStorage.setItem("aegis_auth_user", JSON.stringify(user));
+    setAuthToken(token);
+    setAuthUser(user);
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError(null);
+    setAuthBusy(true);
+
+    try {
+      const result =
+        authMode === "login"
+          ? await apiLogin({ baseUrl: backendUrl }, authEmail, authPassword)
+          : await apiRegister({ baseUrl: backendUrl }, authEmail, authPassword);
+      persistAuth(result.access_token, result.user);
+      setAuthPassword("");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("aegis_auth_token");
+    localStorage.removeItem("aegis_auth_user");
+    setAuthToken(null);
+    setAuthUser(null);
+    setMissionDetail(null);
+  }
+
+  async function loadMissionDetail(runId: string) {
+    if (!authToken) {
+      return;
+    }
+    setMissionDetailLoading(runId);
+    try {
+      const detail = await fetchRunDetail({ baseUrl: backendUrl }, runId, authToken);
+      setMissionDetail(detail);
+    } catch {
+      setMissionDetail(null);
+    } finally {
+      setMissionDetailLoading(null);
+    }
+  }
+
   const response = state.response;
 
   return (
@@ -684,6 +753,63 @@ export function App() {
                 Recheck
               </button>
             </div>
+          </div>
+
+          <div className="auth-widget">
+            {authUser ? (
+              <div className="auth-widget__signed-in">
+                <span>
+                  Signed in as <strong>{authUser.email}</strong>
+                </span>
+                <button type="button" className="scenario-chip" onClick={handleLogout}>
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <form className="auth-widget__form" onSubmit={handleAuthSubmit}>
+                <div className="auth-widget__tabs">
+                  <button
+                    type="button"
+                    className={`auth-widget__tab${authMode === "login" ? " auth-widget__tab--active" : ""}`}
+                    onClick={() => setAuthMode("login")}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    className={`auth-widget__tab${authMode === "register" ? " auth-widget__tab--active" : ""}`}
+                    onClick={() => setAuthMode("register")}
+                  >
+                    Register
+                  </button>
+                </div>
+                <input
+                  type="email"
+                  required
+                  placeholder="email"
+                  className="endpoint-input"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                />
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  placeholder="password (min 8 chars)"
+                  className="endpoint-input"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                />
+                <button type="submit" className="scenario-chip" disabled={authBusy}>
+                  {authBusy ? "…" : authMode === "login" ? "Sign in" : "Create account"}
+                </button>
+                {authError ? <span className="auth-widget__error">{authError}</span> : null}
+              </form>
+            )}
+            <p className="auth-widget__hint">
+              Anonymous demo works fully without an account — sign in to get a personal, isolated
+              mission history with per-agent cost/token observability.
+            </p>
           </div>
         </header>
 
@@ -1065,6 +1191,15 @@ export function App() {
                       ) : (
                         <p className="history-error">{record.error}</p>
                       )}
+                      {authToken && record.runId ? (
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          onClick={() => void loadMissionDetail(record.runId!)}
+                        >
+                          {missionDetailLoading === record.runId ? "Loading…" : "View agent steps"}
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -1076,6 +1211,52 @@ export function App() {
               )}
             </Panel>
           </div>
+
+          {missionDetail ? (
+            <div className="grid__full">
+              <Panel
+                eyebrow="Mission Observability"
+                title={`Mission ${missionDetail.id.slice(0, 8)}`}
+                description="Real per-agent timing, tokens, and cost — persisted server-side, not fabricated."
+                actions={
+                  <button type="button" className="panel-action-button" onClick={() => setMissionDetail(null)}>
+                    Close
+                  </button>
+                }
+              >
+                <ol className="mission-steps">
+                  {missionDetail.steps.map((step, index) => (
+                    <li key={index} className="mission-steps__item">
+                      <span className="mission-steps__agent">{step.agent}</span>
+                      <span className="mission-steps__stat">
+                        {step.status === "ok" ? "✓" : "✗"}{" "}
+                        {step.duration_ms != null ? `${(step.duration_ms / 1000).toFixed(2)}s` : "—"}
+                      </span>
+                      <span className="mission-steps__stat">
+                        {(step.input_tokens ?? 0) + (step.output_tokens ?? 0)} tokens
+                      </span>
+                      <span className="mission-steps__stat">
+                        ${step.cost_usd != null ? step.cost_usd.toFixed(6) : "0.000000"}
+                      </span>
+                      <span className="mission-steps__model">
+                        {step.provider}/{step.model}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <div className="mission-steps__total">
+                  <strong>Total</strong>
+                  <span>
+                    {missionDetail.total_duration_ms != null
+                      ? `${(missionDetail.total_duration_ms / 1000).toFixed(2)}s`
+                      : "—"}
+                  </span>
+                  <span>{missionDetail.total_tokens ?? 0} tokens</span>
+                  <span>${missionDetail.total_cost_usd != null ? missionDetail.total_cost_usd.toFixed(6) : "0.000000"}</span>
+                </div>
+              </Panel>
+            </div>
+          ) : null}
 
           <div className="grid__full">
             <Panel

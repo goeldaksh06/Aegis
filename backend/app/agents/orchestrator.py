@@ -75,7 +75,7 @@ async def run_orchestrated_plan(
             preference=request.preference,
             preferred_provider=request.preferred_provider,
         )
-        sub_result = await target_agent.handle(sub_request, on_stage=None)
+        sub_result = await target_agent.handle(sub_request, on_stage=on_stage)
         sub_results.append(sub_result)
         combined_tool_results.extend(sub_result.tool_results)
 

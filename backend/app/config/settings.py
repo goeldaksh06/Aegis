@@ -23,6 +23,13 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    # Dev-only default — MUST be overridden via JWT_SECRET_KEY in .env for any deployment
+    # that isn't a single developer's own machine. A predictable secret lets anyone forge
+    # valid auth tokens.
+    JWT_SECRET_KEY: str = "dev-only-insecure-secret-change-me"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",

@@ -39,6 +39,7 @@ export async function runChatStream(
   config: ChatClientConfig,
   request: ChatRequest,
   onStage: (event: TraceStageEvent) => void,
+  token?: string | null,
   signal?: AbortSignal,
 ): Promise<ChatResponse> {
   const response = await fetch(`${normalizeBaseUrl(config.baseUrl)}/chat/stream`, {
@@ -46,6 +47,7 @@ export async function runChatStream(
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(request),
     signal,

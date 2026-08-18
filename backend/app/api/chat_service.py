@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from app.agents.orchestrator import run_orchestrated_plan
 from app.agents.support import StageCallback
-from app.database.db import save_run
+from app.database.db import save_agent_steps, save_run
 from app.events.bus import EventBus, event_bus
 from app.models.schemas import EventRecord, EventType
 from app.models.schemas import AgentResult, AgentRoutingInput, ChatMessage, ChatRequest, ChatResponse, AgentType
@@ -21,9 +22,15 @@ class ChatAgent(Protocol):
 class ChatResult:
     response: ChatResponse
     selected_agent: AgentType
+    run_id: str
 
 
-def agent_result_to_response(agent_result: AgentResult, sub_results: list[AgentResult] | None = None) -> ChatResponse:
+def agent_result_to_response(
+    agent_result: AgentResult,
+    sub_results: list[AgentResult] | None = None,
+    *,
+    run_id: str | None = None,
+) -> ChatResponse:
     return ChatResponse(
         content=agent_result.content,
         routing=agent_result.routing,
@@ -35,7 +42,29 @@ def agent_result_to_response(agent_result: AgentResult, sub_results: list[AgentR
         moderation=agent_result.moderation,
         conversation_id=agent_result.conversation_id,
         sub_results=[agent_result_to_response(sub) for sub in (sub_results or [])],
+        run_id=run_id,
     )
+
+
+def _collect_generation_steps(events: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Reduce raw on_stage events down to one row per real LLM call ("generation" stage).
+
+    This is what powers per-agent observability (GET /runs/{id}) — a single-agent request
+    produces one row, an orchestrated request produces one row per agent actually dispatched.
+    """
+    return [
+        {
+            "agent": event.get("agent"),
+            "model": event.get("model"),
+            "provider": event.get("provider"),
+            "duration_ms": event.get("elapsed_ms"),
+            "input_tokens": event.get("input_tokens"),
+            "output_tokens": event.get("output_tokens"),
+            "cost_usd": event.get("cost_usd"),
+            "retrieved_count": event.get("retrieved_count"),
+        }
+        for event in events
+    ]
 
 
 @dataclass
@@ -48,7 +77,7 @@ class ChatService:
         if not self.agents:
             raise ValueError("ChatService requires at least one agent implementation.")
 
-    async def chat(self, request: ChatRequest) -> ChatResult:
+    async def chat(self, request: ChatRequest, *, user_id: str | None = None) -> ChatResult:
         await self.event_bus.publish(
             EventRecord(
                 event_type=EventType.REQUEST_RECEIVED,
@@ -73,6 +102,13 @@ class ChatService:
         if agent is None:
             raise RuntimeError(f"No agent registered for '{decision.agent}'")
 
+        run_id = str(uuid.uuid4())
+        generation_events: list[dict[str, object]] = []
+
+        async def on_stage(name: str, data: dict[str, object]) -> None:
+            if name == "generation":
+                generation_events.append(data)
+
         try:
             sub_results: list[AgentResult] = []
             if request.orchestrate:
@@ -82,11 +118,12 @@ class ChatService:
                     agents=self.agents,
                     agent_router=self.agent_router,
                     request=request,
+                    on_stage=on_stage,
                 )
             else:
-                agent_result = await agent.handle(request)
+                agent_result = await agent.handle(request, on_stage=on_stage)
 
-            response = agent_result_to_response(agent_result, sub_results)
+            response = agent_result_to_response(agent_result, sub_results, run_id=run_id)
             await self.event_bus.publish(
                 EventRecord(
                     event_type=EventType.REQUEST_COMPLETED,
@@ -106,6 +143,8 @@ class ChatService:
                 )
             )
             await save_run(
+                id=run_id,
+                user_id=user_id,
                 prompt=agent_input.task,
                 status="success",
                 agent=decision.agent.value,
@@ -121,7 +160,8 @@ class ChatService:
                 moderation_blocked=agent_result.moderation.blocked if agent_result.moderation else None,
                 conversation_id=agent_result.conversation_id,
             )
-            return ChatResult(response=response, selected_agent=decision.agent)
+            await save_agent_steps(run_id, _collect_generation_steps(generation_events))
+            return ChatResult(response=response, selected_agent=decision.agent, run_id=run_id)
         except Exception as exc:
             await self.event_bus.publish(
                 EventRecord(
@@ -130,7 +170,14 @@ class ChatService:
                     error=str(exc),
                 )
             )
-            await save_run(prompt=agent_input.task, status="error", agent=decision.agent.value, error=str(exc))
+            await save_run(
+                id=run_id,
+                user_id=user_id,
+                prompt=agent_input.task,
+                status="error",
+                agent=decision.agent.value,
+                error=str(exc),
+            )
             raise
 
     @staticmethod

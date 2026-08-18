@@ -35,6 +35,11 @@ On top of single-agent runs, an **orchestration mode** lets a Planner agent deco
 task and dispatch sub-steps to other agents automatically — real agent-to-agent handoff,
 not just routing.
 
+The anonymous demo works with zero login — but signing in gets you a personal, isolated
+mission history with real per-agent observability: exact duration, tokens, and cost for
+every agent actually dispatched in a mission (not estimated after the fact — persisted from
+the same checkpoints the live trace already streams).
+
 ## Architecture at a glance
 
 ```mermaid
@@ -55,7 +60,8 @@ flowchart LR
 
 ## Tech stack
 
-- **Backend:** FastAPI, Pydantic v2, SQLAlchemy (async) + aiosqlite, FAISS, sentence-transformers
+- **Backend:** FastAPI, Pydantic v2, SQLAlchemy (async) + aiosqlite, FAISS, sentence-transformers,
+  PyJWT + bcrypt for authentication
 - **LLM providers:** Google Gemini, OpenAI-compatible gateways, Anthropic, and a deterministic
   mock provider for free local dev/CI
 - **Frontend:** React + TypeScript + Vite, Server-Sent Events for live pipeline streaming
