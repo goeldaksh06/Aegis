@@ -1,0 +1,38 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Databases
+*.db
+
+# Frontend
+**/node_modules/
+**/dist/
+**/coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Internal working docs / local-only test suites (not part of the published repo)
+CLAUDE.md
+backend/tests/
+frontend/src/**/*.test.ts
+frontend/src/**/*.test.tsx
