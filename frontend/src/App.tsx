@@ -1,4 +1,4 @@
-import { KeyboardEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, FormEvent, ReactElement, useEffect, useRef, useState } from "react";
 
 import { login as apiLogin, register as apiRegister, type UserPayload } from "./api/authClient";
 import { runChatStream, type TraceStageEvent } from "./api/chatStreamClient";
@@ -15,9 +15,52 @@ const DEFAULT_PROMPT =
   "A key supplier just went dark after a port disruption cut off our main shipping lane. " +
   "Analyze the risk to our fulfillment commitments this quarter and recommend an immediate response.";
 
+/** Minimal line icons, hand-drawn rather than pulled from an icon font — kept intentionally
+ * small and monochrome (currentColor) so scenario cards read as a designed product surface
+ * instead of an emoji-decorated demo. */
+function IconSupplyChain() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z" />
+      <path d="M3 7.5 12 12l9-4.5" />
+      <path d="M12 12v9" />
+    </svg>
+  );
+}
+
+function IconShield() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 5 6v6c0 4.2 3 7.4 7 9 4-1.6 7-4.8 7-9V6l-7-3Z" />
+      <path d="m9.5 12 1.8 1.8 3.2-3.6" />
+    </svg>
+  );
+}
+
+function IconMarket() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19V5" />
+      <path d="M4 19h16" />
+      <path d="m7 15 3.5-4 3 2.5L18 8" />
+      <path d="M14 8h4v4" />
+    </svg>
+  );
+}
+
+function IconStorm() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 16a4 4 0 0 1 .5-8 5 5 0 0 1 9.6-1.6A4.5 4.5 0 0 1 17 16H7Z" />
+      <path d="m12 16-2 4" />
+      <path d="m16 16-2 4" />
+    </svg>
+  );
+}
+
 interface ScenarioChip {
   label: string;
-  icon: string;
+  Icon: () => ReactElement;
   description: string;
   exampleQuestion: string;
   prompt: string;
@@ -26,14 +69,14 @@ interface ScenarioChip {
 const SCENARIO_CHIPS: ScenarioChip[] = [
   {
     label: "Supply Chain Risk",
-    icon: "📦",
+    Icon: IconSupplyChain,
     description: "Assess operational disruption risk and identify major contributing factors.",
     exampleQuestion: "A key supplier just went dark after a port disruption — what's our exposure?",
     prompt: DEFAULT_PROMPT,
   },
   {
     label: "Cybersecurity",
-    icon: "🛡️",
+    Icon: IconShield,
     description: "Analyze a potential security incident and recommend immediate actions.",
     exampleQuestion: "Our customer database may have been breached — how bad is it?",
     prompt:
@@ -42,7 +85,7 @@ const SCENARIO_CHIPS: ScenarioChip[] = [
   },
   {
     label: "Market Intelligence",
-    icon: "📈",
+    Icon: IconMarket,
     description: "Investigate market signals and identify key risks and opportunities.",
     exampleQuestion: "A competitor just went bankrupt and our sector dropped 15% — do we need to react?",
     prompt:
@@ -51,7 +94,7 @@ const SCENARIO_CHIPS: ScenarioChip[] = [
   },
   {
     label: "Disaster Response",
-    icon: "🌀",
+    Icon: IconStorm,
     description: "Analyze a developing situation and prioritize response actions.",
     exampleQuestion: "A hurricane is 48 hours from our main distribution center — what should we do first?",
     prompt:
@@ -539,18 +582,38 @@ function ExecutionTrace({ events, isLive }: { events: TraceStageEvent[]; isLive:
             !isDone &&
             stages.slice(0, index).every((s) => seen.has(s) || OPTIONAL_STAGES.has(s));
 
+          const marker = <span className="execution-trace__marker">{isDone ? (stage === "error" ? "!" : "✓") : index + 1}</span>;
+          const label = <span className="execution-trace__label">{TRACE_STAGE_LABELS[stage]}</span>;
+
+          if (!event) {
+            return (
+              <li
+                key={stage}
+                className={`execution-trace__step${isActive ? " execution-trace__step--active" : ""}`}
+              >
+                {marker}
+                <div className="execution-trace__body">{label}</div>
+              </li>
+            );
+          }
+
           return (
             <li
               key={stage}
-              className={`execution-trace__step${isDone ? " execution-trace__step--done" : ""}${
-                isActive ? " execution-trace__step--active" : ""
-              }${stage === "error" ? " execution-trace__step--error" : ""}`}
+              className={`execution-trace__step execution-trace__step--done${
+                stage === "error" ? " execution-trace__step--error" : ""
+              }`}
             >
-              <span className="execution-trace__marker">{isDone ? (stage === "error" ? "!" : "✓") : index + 1}</span>
-              <div className="execution-trace__body">
-                <span className="execution-trace__label">{TRACE_STAGE_LABELS[stage]}</span>
-                {event ? <span className="execution-trace__detail">{summarizeStage(event)}</span> : null}
-              </div>
+              <details className="execution-trace__details">
+                <summary>
+                  {marker}
+                  <div className="execution-trace__body">
+                    {label}
+                    <span className="execution-trace__detail">{summarizeStage(event)}</span>
+                  </div>
+                </summary>
+                <pre className="execution-trace__raw">{formatJson(event.data)}</pre>
+              </details>
             </li>
           );
         })}
@@ -968,10 +1031,11 @@ export function App() {
         <header className="hero">
           <div>
             <p className="hero__kicker">Aegis</p>
-            <h1 className="hero__title">Multi-Agent Intelligence for Complex Decisions</h1>
+            <h1 className="hero__title">Describe a situation. Get a decision brief.</h1>
             <p className="hero__subtitle">
-              Aegis coordinates specialized AI agents to investigate complex questions, ground findings
-              in evidence, evaluate results, and produce structured intelligence briefs.
+              Aegis routes your question to the agent built for it, pulls supporting evidence
+              from an indexed knowledge base, and returns a risk-scored brief with sources —
+              not a wall of unstructured text.
             </p>
             <div className="hero__cta">
               <button
@@ -1125,7 +1189,7 @@ export function App() {
           {SCENARIO_CHIPS.map((chip) => (
             <article key={chip.label} className="scenario-card">
               <div className="scenario-card__icon" aria-hidden="true">
-                {chip.icon}
+                <chip.Icon />
               </div>
               <h3>{chip.label}</h3>
               <p className="scenario-card__description">{chip.description}</p>
