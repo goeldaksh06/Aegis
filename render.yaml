@@ -5,7 +5,7 @@ services:
     rootDir: backend
     plan: free
     region: oregon
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --no-cache-dir torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -19,6 +19,8 @@ services:
         value: "*"
       - key: ENVIRONMENT
         value: production
+      - key: PYTHON_VERSION
+        value: 3.12.4
       # Set these manually in the Render dashboard once you have a live provider key —
       # left blank here so nothing sensitive is ever committed to the repo.
       - key: OPENAI_API_KEY
