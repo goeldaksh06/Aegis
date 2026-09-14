@@ -1,28 +1,25 @@
-import { useState } from "react";
+import { HashRouter, Route, Routes } from "react-router-dom";
 
 import { App } from "./App";
+import { AuthPage } from "./AuthPage";
 import { LandingPage } from "./LandingPage";
 
-const VIEW_STORAGE_KEY = "aegis_view";
-
+/**
+ * HashRouter, not BrowserRouter: this is a static SPA that may end up on plain static
+ * hosting with no server-side rewrite rule configured for deep links (e.g. a visitor
+ * refreshing on /login would 404 without one). Hash-based routes ("/#/login") work
+ * correctly on any static host with zero server configuration.
+ */
 export function Root() {
-  const [view, setView] = useState<"landing" | "console">(() =>
-    sessionStorage.getItem(VIEW_STORAGE_KEY) === "console" ? "console" : "landing",
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
+        <Route path="/console" element={<App />} />
+        <Route path="*" element={<LandingPage />} />
+      </Routes>
+    </HashRouter>
   );
-
-  function goToConsole() {
-    sessionStorage.setItem(VIEW_STORAGE_KEY, "console");
-    setView("console");
-  }
-
-  function goToLanding() {
-    sessionStorage.setItem(VIEW_STORAGE_KEY, "landing");
-    setView("landing");
-  }
-
-  if (view === "landing") {
-    return <LandingPage onLaunch={goToConsole} />;
-  }
-
-  return <App onBackToOverview={goToLanding} />;
 }

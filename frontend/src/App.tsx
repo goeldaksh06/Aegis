@@ -1,6 +1,8 @@
 import { KeyboardEvent, FormEvent, ReactElement, useEffect, useRef, useState } from "react";
 
-import { login as apiLogin, register as apiRegister, type UserPayload } from "./api/authClient";
+import { Link } from "react-router-dom";
+
+import type { UserPayload } from "./api/authClient";
 import { runChatStream, type TraceStageEvent } from "./api/chatStreamClient";
 import { checkBackendHealth } from "./api/healthClient";
 import { fetchPersistedRuns, fetchRunDetail, type RunDetailPayload } from "./api/runsClient";
@@ -720,7 +722,7 @@ function OnboardingModal({ onTryDemo, onExplore, onSkip }: { onTryDemo: () => vo
   );
 }
 
-export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}) {
+export function App() {
   const [backendUrl, setBackendUrl] = useState(INITIAL_OPERATOR_STATE.backendUrl);
   const [backendHealth, setBackendHealth] = useState<BackendHealthState>({
     status: "checking",
@@ -747,11 +749,6 @@ export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}
     const raw = localStorage.getItem("aegis_auth_user");
     return raw ? (JSON.parse(raw) as UserPayload) : null;
   });
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authBusy, setAuthBusy] = useState(false);
   const [missionDetail, setMissionDetail] = useState<RunDetailPayload | null>(null);
   const [missionDetailLoading, setMissionDetailLoading] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(
@@ -949,32 +946,6 @@ export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}
     }
   }
 
-  function persistAuth(token: string, user: UserPayload) {
-    localStorage.setItem("aegis_auth_token", token);
-    localStorage.setItem("aegis_auth_user", JSON.stringify(user));
-    setAuthToken(token);
-    setAuthUser(user);
-  }
-
-  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAuthError(null);
-    setAuthBusy(true);
-
-    try {
-      const result =
-        authMode === "login"
-          ? await apiLogin({ baseUrl: backendUrl }, authEmail, authPassword)
-          : await apiRegister({ baseUrl: backendUrl }, authEmail, authPassword);
-      persistAuth(result.access_token, result.user);
-      setAuthPassword("");
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Authentication failed.");
-    } finally {
-      setAuthBusy(false);
-    }
-  }
-
   function handleLogout() {
     localStorage.removeItem("aegis_auth_token");
     localStorage.removeItem("aegis_auth_user");
@@ -1032,11 +1003,9 @@ export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}
           <div>
             <div className="hero__kicker-row">
               <p className="hero__kicker">Aegis</p>
-              {onBackToOverview ? (
-                <button type="button" className="hero__back-link" onClick={onBackToOverview}>
-                  ← Overview
-                </button>
-              ) : null}
+              <Link to="/" className="hero__back-link">
+                ← Overview
+              </Link>
             </div>
             <h1 className="hero__title">Describe a situation. Get a decision brief.</h1>
             <p className="hero__subtitle">
@@ -1105,61 +1074,26 @@ export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}
             </div>
           </div>
 
-          <div className="auth-widget">
+          <div className="auth-indicator">
             {authUser ? (
-              <div className="auth-widget__signed-in">
-                <span>
+              <>
+                <span className="auth-indicator__status">
                   Signed in as <strong>{authUser.email}</strong>
                 </span>
-                <button type="button" className="scenario-chip" onClick={handleLogout}>
+                <button type="button" className="auth-indicator__action" onClick={handleLogout}>
                   Log out
                 </button>
-              </div>
+              </>
             ) : (
-              <form className="auth-widget__form" onSubmit={handleAuthSubmit}>
-                <div className="auth-widget__tabs">
-                  <button
-                    type="button"
-                    className={`auth-widget__tab${authMode === "login" ? " auth-widget__tab--active" : ""}`}
-                    onClick={() => setAuthMode("login")}
-                  >
-                    Sign in
-                  </button>
-                  <button
-                    type="button"
-                    className={`auth-widget__tab${authMode === "register" ? " auth-widget__tab--active" : ""}`}
-                    onClick={() => setAuthMode("register")}
-                  >
-                    Register
-                  </button>
-                </div>
-                <input
-                  type="email"
-                  required
-                  placeholder="email"
-                  className="endpoint-input"
-                  value={authEmail}
-                  onChange={(event) => setAuthEmail(event.target.value)}
-                />
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  placeholder="password (min 8 chars)"
-                  className="endpoint-input"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
-                />
-                <button type="submit" className="scenario-chip" disabled={authBusy}>
-                  {authBusy ? "…" : authMode === "login" ? "Sign in" : "Create account"}
-                </button>
-                {authError ? <span className="auth-widget__error">{authError}</span> : null}
-              </form>
+              <>
+                <span className="auth-indicator__status">
+                  Using Aegis anonymously — sign in for a saved mission history.
+                </span>
+                <Link to="/login" className="auth-indicator__action">
+                  Sign in
+                </Link>
+              </>
             )}
-            <p className="auth-widget__hint">
-              Anonymous demo works fully without an account — sign in to get a personal, isolated
-              mission history with per-agent cost/token observability.
-            </p>
           </div>
         </header>
 

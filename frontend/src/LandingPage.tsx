@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
 
 function IconRoute() {
   return (
@@ -89,7 +90,7 @@ const STEPS = [
   { n: "04", title: "You get a brief, not a wall of text", detail: "Risk score, findings, actions, evidence, cost, and a quality score." },
 ];
 
-export function LandingPage({ onLaunch }: { onLaunch: () => void }) {
+export function LandingPage() {
   return (
     <div className="landing">
       <nav className="landing-nav">
@@ -98,9 +99,10 @@ export function LandingPage({ onLaunch }: { onLaunch: () => void }) {
           <a href="https://github.com/goeldaksh06/Aegis" target="_blank" rel="noreferrer">
             Source
           </a>
-          <button type="button" className="landing-nav__cta" onClick={onLaunch}>
+          <Link to="/login">Sign in</Link>
+          <Link to="/console" className="landing-nav__cta">
             Launch Console
-          </button>
+          </Link>
         </div>
       </nav>
 
@@ -117,9 +119,9 @@ export function LandingPage({ onLaunch }: { onLaunch: () => void }) {
           risk-scored brief — with the full execution trace behind it, not a black box.
         </p>
         <div className="landing-hero__actions">
-          <button type="button" className="run-button" onClick={onLaunch}>
+          <Link to="/console" className="run-button">
             Try it live
-          </button>
+          </Link>
           <a className="landing-hero__secondary" href="#how-it-works">
             See how it works ↓
           </a>
@@ -172,9 +174,9 @@ export function LandingPage({ onLaunch }: { onLaunch: () => void }) {
       <section className="landing-cta">
         <h2>Run a real mission — it takes about ten seconds.</h2>
         <p>The demo works instantly, no account needed. Sign in later if you want a saved history.</p>
-        <button type="button" className="run-button" onClick={onLaunch}>
+        <Link to="/console" className="run-button">
           Launch Console
-        </button>
+        </Link>
       </section>
 
       <footer className="landing-footer">
