@@ -720,7 +720,7 @@ function OnboardingModal({ onTryDemo, onExplore, onSkip }: { onTryDemo: () => vo
   );
 }
 
-export function App() {
+export function App({ onBackToOverview }: { onBackToOverview?: () => void } = {}) {
   const [backendUrl, setBackendUrl] = useState(INITIAL_OPERATOR_STATE.backendUrl);
   const [backendHealth, setBackendHealth] = useState<BackendHealthState>({
     status: "checking",
@@ -1030,7 +1030,14 @@ export function App() {
       <main className="console">
         <header className="hero">
           <div>
-            <p className="hero__kicker">Aegis</p>
+            <div className="hero__kicker-row">
+              <p className="hero__kicker">Aegis</p>
+              {onBackToOverview ? (
+                <button type="button" className="hero__back-link" onClick={onBackToOverview}>
+                  ← Overview
+                </button>
+              ) : null}
+            </div>
             <h1 className="hero__title">Describe a situation. Get a decision brief.</h1>
             <p className="hero__subtitle">
               Aegis routes your question to the agent built for it, pulls supporting evidence
