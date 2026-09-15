@@ -23,12 +23,6 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
-    # Local embeddings (sentence-transformers + torch) need more RAM than a free-tier host
-    # (e.g. Render's 512MB) can spare once actually loaded — set to false to skip constructing
-    # the retrieval stack entirely so agents still answer, just without retrieved-document
-    # grounding, instead of the process OOM-crashing on the first RAG-using request.
-    RAG_ENABLED: bool = True
-
     # Dev-only default — MUST be overridden via JWT_SECRET_KEY in .env for any deployment
     # that isn't a single developer's own machine. A predictable secret lets anyone forge
     # valid auth tokens.

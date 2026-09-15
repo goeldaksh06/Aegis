@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import List
 
-if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer
 
 
 class EmbeddingService:
@@ -34,12 +33,6 @@ class EmbeddingService:
             Loaded SentenceTransformer model.
         """
         if EmbeddingService._model is None:
-            # Imported here, not at module level: sentence-transformers pulls in
-            # transformers + torch on import alone, which is heavy enough to matter on
-            # memory-constrained hosts. Deferring the import means that cost is only ever
-            # paid on the first real RAG request, not at process startup.
-            from sentence_transformers import SentenceTransformer
-
             EmbeddingService._model = SentenceTransformer(self.model_name)
 
         return EmbeddingService._model
