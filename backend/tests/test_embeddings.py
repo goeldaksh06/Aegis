@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from app.retrieval.embeddings import EmbeddingService
 
 
-@patch("app.retrieval.embeddings.SentenceTransformer")
+@patch("sentence_transformers.SentenceTransformer")
 def test_embed_text_returns_vector(mock_model):
     fake_model = MagicMock()
 
@@ -24,7 +24,7 @@ def test_embed_text_returns_vector(mock_model):
     assert vector == [0.1, 0.2, 0.3]
 
 
-@patch("app.retrieval.embeddings.SentenceTransformer")
+@patch("sentence_transformers.SentenceTransformer")
 def test_embed_texts_returns_vectors(mock_model):
     fake_model = MagicMock()
 
@@ -49,7 +49,7 @@ def test_embed_texts_returns_vectors(mock_model):
     assert len(vectors) == 2
 
 
-@patch("app.retrieval.embeddings.SentenceTransformer")
+@patch("sentence_transformers.SentenceTransformer")
 def test_model_loaded_only_once(mock_model):
     fake_model = MagicMock()
 
