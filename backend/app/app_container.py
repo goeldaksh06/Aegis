@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from dataclasses import dataclass
 
+from app.config.settings import settings
 from app.events.bus import event_bus
 from app.events.cost import cost_collector
 from app.events.evaluation import evaluation_collector
@@ -70,7 +71,13 @@ def get_document_indexer() -> DocumentIndexer:
 
 
 @lru_cache
-def get_rag_tool() -> RAGTool:
+def get_rag_tool() -> RAGTool | None:
+    # When RAG is disabled (settings.RAG_ENABLED=False), never call get_retrieval_runtime() at
+    # all — that's what actually triggers loading sentence-transformers/torch (via
+    # index_seed_documents' embedding calls), not just constructing the class. Agents already
+    # handle rag_tool=None by skipping retrieval outright (app/agents/support.py).
+    if not settings.RAG_ENABLED:
+        return None
     return get_retrieval_runtime().rag_tool
 
 
